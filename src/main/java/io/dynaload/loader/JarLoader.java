@@ -10,7 +10,7 @@ public class JarLoader {
 
     public JarLoader(File jarFile) throws Exception {
         if (!jarFile.exists()) {
-            throw new IllegalArgumentException("Jar file not found: " + jarFile.getAbsolutePath());
+            throw new IllegalArgumentException("[Dynaload] Jar file not found: " + jarFile.getAbsolutePath());
         }
 
         this.loader = new URLClassLoader(new URL[]{jarFile.toURI().toURL()},

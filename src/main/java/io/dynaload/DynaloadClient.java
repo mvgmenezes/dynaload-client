@@ -1,12 +1,9 @@
 package io.dynaload;
 
-import io.dynaload.loader.DynamicClassLoader;
 import io.dynaload.service.DynaloadService;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
-import java.io.IOException;
-import java.lang.reflect.InvocationTargetException;
 import java.net.Socket;
 import java.util.List;
 
@@ -25,15 +22,15 @@ public class DynaloadClient {
 
             // 1. Verifica se o servidor está respondendo
             if (service.ping(receivedServer, sendServer)) {
-                System.out.println("[Client] Server is reachable");
+                System.out.println("[Dynaload] Server is reachable");
             } else {
-                System.err.println("[Client] No response from server.");
+                System.err.println("[Dynaload] No response from server.");
                 return;
             }
 
             // 2. Lista as classes disponíveis
             List<String> classes = service.listRemoteClasses(receivedServer, sendServer);
-            System.out.println("[Client] Registered classes:");
+            System.out.println("[Dynaload] Registered classes:");
             for (String c : classes) {
                 System.out.println(" - " + c);
             }
@@ -47,7 +44,14 @@ public class DynaloadClient {
 //                System.out.println("[Client] Created instance: " + instance);
 //            }
 
-            service.fetchAndSaveClass("v1/account", receivedServer, sendServer);
+//            service.fetchAndSaveClass("v1/account", receivedServer, sendServer);
+//            service.fetchAndSaveClass("v1/user", receivedServer, sendServer);
+//            service.fetchAndSaveClass("v1/timeutils", receivedServer, sendServer);
+
+            for (String path : classes) {
+                service.fetchAndSaveClass(path, receivedServer, sendServer);
+                System.out.println("[Dynaload] Loaded class: " + path);
+            }
 
             service.closeConection(receivedServer, sendServer);
         }

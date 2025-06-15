@@ -8,6 +8,8 @@ import io.dynaload.util.ClassWriterUtil;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.File;
+import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -34,8 +36,23 @@ public class DynaloadService {
             JarPackager.generatePackage(BASE_DIR);
             File jarFile = new File("build/dynaload-models.jar");
             JarLoader jarLoader = new JarLoader(jarFile);
+            loadAndValidate(bytecode, className);
         }
+    }
 
+    public Class<?> loadAndValidate(byte[] bytecode, String className) {
+        try {
+            DynamicClassLoader loader = new DynamicClassLoader();
+            Class<?> clazz = loader.defineClassFromBytes(className, bytecode);
+
+            // Validação leve
+            validateClass(clazz);
+
+            return clazz;
+        } catch (NoClassDefFoundError e) {
+            System.err.println("[Dynaload Client] - Error to load class " + className + ": " + e.getMessage());
+            return null;
+        }
     }
 
     /**
@@ -96,8 +113,31 @@ public class DynaloadService {
         sendServer.writeUTF("CLOSE");
         String response = receivedServer.readUTF();
         if ("CLOSED".equals(response)) {
-            System.out.println("[Client] Session closed by client");
+            System.out.println("[Dynaload] Session closed by client");
         }
         return true;
+    }
+
+    public static void validateClass(Class<?> clazz) {
+        try {
+            Object instance = clazz.getDeclaredConstructor().newInstance();
+
+            for (Method method : clazz.getDeclaredMethods()) {
+                if (Modifier.isPublic(method.getModifiers())
+                        && method.getParameterCount() == 0
+                        && method.getReturnType() != void.class) {
+                    method.setAccessible(true);
+                    try {
+                        method.invoke(instance);
+                    } catch (Throwable e) {
+                        System.err.println("[Dynaload] Validation Class error: " + method.getName());
+                        e.printStackTrace();
+                    }
+                }
+            }
+        } catch (Throwable e) {
+            System.err.println("[Dynaload] Validation Class error: " + clazz.getName());
+            e.printStackTrace();
+        }
     }
 }
