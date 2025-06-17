@@ -5,19 +5,23 @@ import io.dynaload.loader.JarLoader;
 import io.dynaload.loader.JarPackager;
 import io.dynaload.util.ClassWriterUtil;
 
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.File;
+import java.io.*;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.jar.JarEntry;
+import java.util.jar.JarOutputStream;
 
 public class DynaloadService {
 
     private final static String BASE_DIR = "build/dynaload";
+    private JarLoader jarLoader = null;
 
-    public void fetchAndSaveClass(String key, DataInputStream receivedServer, DataOutputStream sendServer) throws Exception {
+    public String fetchAndSaveClass(String key, DataInputStream receivedServer, DataOutputStream sendServer) throws Exception {
         sendServer.writeUTF("GET_CLASS");
         sendServer.writeUTF(key);
 
@@ -35,9 +39,16 @@ public class DynaloadService {
         if(ClassWriterUtil.saveClassToFile(className, bytecode, BASE_DIR)){
             JarPackager.generatePackage(BASE_DIR);
             File jarFile = new File("build/dynaload-models.jar");
-            JarLoader jarLoader = new JarLoader(jarFile);
-            loadAndValidate(bytecode, className);
+            jarLoader = new JarLoader(jarFile);
+            //loadAndValidate(bytecode, className);
+            return className;
         }
+        return null;
+    }
+
+    public Class<?> loadClassFromJar(String className) throws Exception {
+        //jarLoader = new JarLoader(new File("build/dynaload-models.jar"));
+        return jarLoader.load(className);
     }
 
     public Class<?> loadAndValidate(byte[] bytecode, String className) {
@@ -137,6 +148,37 @@ public class DynaloadService {
             }
         } catch (Throwable e) {
             System.err.println("[Dynaload] Validation Class error: " + clazz.getName());
+            e.printStackTrace();
+        }
+    }
+
+    public void exportJarToLibs() {
+        try {
+            Path buildDir = Paths.get("build/dynaload");
+            Path outputJar = Paths.get("dynaload/libs/dynaload-models.jar");
+
+            // Garante que o diretório de destino exista
+            Files.createDirectories(outputJar.getParent());
+
+            try (JarOutputStream jarOut = new JarOutputStream(new FileOutputStream(outputJar.toFile()))) {
+                Files.walk(buildDir)
+                        .filter(Files::isRegularFile)
+                        .forEach(path -> {
+                            try {
+                                String entryName = buildDir.relativize(path).toString().replace("\\", "/");
+                                JarEntry entry = new JarEntry(entryName);
+                                jarOut.putNextEntry(entry);
+                                Files.copy(path, jarOut);
+                                jarOut.closeEntry();
+                            } catch (IOException e) {
+                                e.printStackTrace();
+                            }
+                        });
+            }
+
+            System.out.println("[Dynaload] Exported dynaload-models.jar to dynaload-libs/");
+        } catch (IOException e) {
+            System.err.println("[Dynaload] Failed to export dynaload-models.jar");
             e.printStackTrace();
         }
     }

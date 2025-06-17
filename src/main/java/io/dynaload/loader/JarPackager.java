@@ -15,9 +15,10 @@ public class JarPackager {
     private static void createJar(File[] classFiles, String baseDirPath, File outputJar) throws IOException {
         try (JarOutputStream jarOut = new JarOutputStream(new FileOutputStream(outputJar))) {
             for (File classFile : classFiles) {
-                String entryName = classFile.getAbsolutePath()
-                        .replace(baseDirPath, "") // remove base path
-                        .replace(File.separatorChar, '/'); // padroniza separadores
+
+                String entryName = classFile.getCanonicalPath()
+                        .replace(new File(baseDirPath).getCanonicalPath() + File.separator, "")
+                        .replace(File.separatorChar, '/');
 
                 jarOut.putNextEntry(new JarEntry(entryName));
                 try (FileInputStream in = new FileInputStream(classFile)) {

@@ -5,12 +5,18 @@ import io.dynaload.service.DynaloadService;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.net.Socket;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 public class DynaloadClient {
     public static void main(String[] args) throws Exception {
+        connect("localhost", 9999);
+    }
+
+    public static void connect(String host, int port) throws Exception {
         // Cria um socket TCP para se conectar ao servidor Dynaload rodando localmente na porta 9999
-        try (Socket socket = new Socket("localhost", 9999)) {
+        try (Socket socket = new Socket(host, port)) {
 
             // Cria um canal para ENVIAR dados para o servidor (output)
             DataOutputStream sendServer = new DataOutputStream(socket.getOutputStream());
@@ -48,11 +54,30 @@ public class DynaloadClient {
 //            service.fetchAndSaveClass("v1/user", receivedServer, sendServer);
 //            service.fetchAndSaveClass("v1/timeutils", receivedServer, sendServer);
 
+            Map<String, String> keyToClassName = new HashMap<>();
+
             for (String path : classes) {
-                service.fetchAndSaveClass(path, receivedServer, sendServer);
-                System.out.println("[Dynaload] Loaded class: " + path);
+                String className = service.fetchAndSaveClass(path, receivedServer, sendServer);
+                if (className != null) {
+                    keyToClassName.put(path, className);
+                    System.out.println("[Dynaload] Loaded class: " + className);
+                }
+                //service.fetchAndSaveClass(path, receivedServer, sendServer);
+                //System.out.println("[Dynaload] Loaded class: " + path);
             }
 
+
+
+
+            service.exportJarToLibs();
+            // 2. Valida todas as classes carregadas (já no mesmo loader)
+            for (String path : classes) {
+                String className = keyToClassName.get(path);
+                if (className != null) {
+                    Class<?> clazz = service.loadClassFromJar(className);
+                    DynaloadService.validateClass(clazz);
+                }
+            }
             service.closeConection(receivedServer, sendServer);
         }
     }
