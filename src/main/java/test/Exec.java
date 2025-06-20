@@ -1,6 +1,5 @@
 package test;
 
-//import io.dynaload.example.models.User;
 //import io.dynaload.example.util.TimeUtils;
 //
 //public class Exec {

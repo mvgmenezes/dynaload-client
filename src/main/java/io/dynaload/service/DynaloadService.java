@@ -1,5 +1,8 @@
 package io.dynaload.service;
 
+import io.dynaload.frame.Frame;
+import io.dynaload.frame.FrameReader;
+import io.dynaload.frame.FrameWriter;
 import io.dynaload.loader.DynamicClassLoader;
 import io.dynaload.loader.JarLoader;
 import io.dynaload.loader.JarPackager;
@@ -16,31 +19,45 @@ import java.util.List;
 import java.util.jar.JarEntry;
 import java.util.jar.JarOutputStream;
 
+import static io.dynaload.util.DynaloadOpCodes.*;
+
 public class DynaloadService {
 
     private final static String BASE_DIR = "build/dynaload";
     private JarLoader jarLoader = null;
 
     public String fetchAndSaveClass(String key, DataInputStream receivedServer, DataOutputStream sendServer) throws Exception {
-        sendServer.writeUTF("GET_CLASS");
-        sendServer.writeUTF(key);
+        // Prepara o payload com o path da classe
+        ByteArrayOutputStream payloadBuffer = new ByteArrayOutputStream();
+        try (DataOutputStream payloadOut = new DataOutputStream(payloadBuffer)) {
+            payloadOut.writeUTF(key);
+        }
 
-        String className = receivedServer.readUTF();
-        int size = receivedServer.readInt();
+        // Envia o frame com opCode GET_CLASS
+        FrameWriter.writeFrame(sendServer, new Frame(0, GET_CLASS, payloadBuffer.toByteArray()));
+
+        // Lê a resposta
+        Frame response = FrameReader.readFrame(receivedServer);
+        if (response == null || response.opCode != GET_CLASS_RESPONSE) {
+            throw new IllegalStateException("Invalid GET_CLASS response");
+        }
+
+        DataInputStream in = new DataInputStream(new ByteArrayInputStream(response.payload));
+        String className = in.readUTF();
+        int size = in.readInt();
 
         if (size < 0) {
             throw new IllegalStateException("[Dynaload] Server returned invalid class size for " + key);
         }
 
         byte[] bytecode = new byte[size];
-        receivedServer.readFully(bytecode);
+        in.readFully(bytecode);
 
-        // Salva em disco para build/debug
-        if(ClassWriterUtil.saveClassToFile(className, bytecode, BASE_DIR)){
+        // Salva em disco
+        if (ClassWriterUtil.saveClassToFile(className, bytecode, BASE_DIR)) {
             JarPackager.generatePackage(BASE_DIR);
             File jarFile = new File("build/dynaload-models.jar");
             jarLoader = new JarLoader(jarFile);
-            //loadAndValidate(bytecode, className);
             return className;
         }
         return null;
@@ -57,6 +74,9 @@ public class DynaloadService {
             Class<?> clazz = loader.defineClassFromBytes(className, bytecode);
 
             // Validação leve
+            if (clazz.isInterface() || clazz.isAnnotation() || Modifier.isAbstract(clazz.getModifiers()) || clazz.isEnum()) {
+                return clazz;
+            }
             validateClass(clazz);
 
             return clazz;
@@ -96,15 +116,16 @@ public class DynaloadService {
      * Solicita ao servidor Dynaload a lista de classes registradas.
      */
     public List<String> listRemoteClasses(DataInputStream receivedServer, DataOutputStream sendServer) throws Exception {
-        sendServer.writeUTF("LIST_CLASSES");
+        FrameWriter.writeFrame(sendServer, new Frame(0, LIST_CLASSES, new byte[0])); // opcode 0x01 = LIST_CLASSES
+        Frame response = FrameReader.readFrame(receivedServer);
+        if (response == null || response.opCode != LIST_CLASSES_RESPONSE) throw new IllegalStateException("Invalid LIST_CLASSES response");
 
-        int count = receivedServer.readInt();
+        DataInputStream in = new DataInputStream(new ByteArrayInputStream(response.payload));
+        int count = in.readInt();
         List<String> results = new ArrayList<>();
-
         for (int i = 0; i < count; i++) {
-            results.add(receivedServer.readUTF());
+            results.add(in.readUTF());
         }
-
         return results;
     }
 
@@ -112,18 +133,24 @@ public class DynaloadService {
      * Envia um PING e espera um PONG como resposta.
      */
     public boolean ping(DataInputStream receivedServer, DataOutputStream sendServer) throws Exception {
-        sendServer.writeUTF("PING");
-        String response = receivedServer.readUTF();
-        return "PONG".equals(response);
+        FrameWriter.writeFrame(sendServer, new Frame(0, PING, new byte[0]));
+        Frame response = FrameReader.readFrame(receivedServer);
+        if (response == null || response.opCode != PONG) {
+            System.err.println("[Dynaload] Invalid PING response");
+            return false;
+        }
+
+        return true;
     }
 
     /**
-     * Envia um PING e espera um PONG como resposta.
+     * Envia um CLOSE e espera um CLOSED_RESPONSE como resposta.
      */
     public boolean closeConection(DataInputStream receivedServer, DataOutputStream sendServer) throws Exception {
-        sendServer.writeUTF("CLOSE");
-        String response = receivedServer.readUTF();
-        if ("CLOSED".equals(response)) {
+
+        FrameWriter.writeFrame(sendServer, new Frame(0, CLOSE, new byte[0])); // Ex: opcode 0x04 = CLOSE
+        Frame response = FrameReader.readFrame(receivedServer);
+        if (response == null || response.opCode != CLOSED_RESPONSE) {
             System.out.println("[Dynaload] Session closed by client");
         }
         return true;
@@ -176,7 +203,7 @@ public class DynaloadService {
                         });
             }
 
-            System.out.println("[Dynaload] Exported dynaload-models.jar to dynaload-libs/");
+            System.out.println("[Dynaload] Exported dynaload-models.jar to dynaload/libs/");
         } catch (IOException e) {
             System.err.println("[Dynaload] Failed to export dynaload-models.jar");
             e.printStackTrace();
