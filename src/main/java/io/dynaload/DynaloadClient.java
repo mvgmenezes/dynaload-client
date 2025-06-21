@@ -1,6 +1,6 @@
 package io.dynaload;
 
-import io.dynaload.service.DynaloadService;
+import io.dynaload.service.DynaloadServerService;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -16,8 +16,9 @@ public class DynaloadClient {
     }
 
     public static void connect(String host, int port) throws Exception {
-        DynaloadService service = new DynaloadService();
+        DynaloadServerService service = new DynaloadServerService();
         if (!pingServer(host, port, service)) return;
+
         List<String> classes = listRemoteClasses(host, port, service);
         if (classes.isEmpty()) {
             System.err.println("[Dynaload] No registered classes found.");
@@ -29,7 +30,7 @@ public class DynaloadClient {
         exportAndValidateClasses(classes, keyToClassName, service);
     }
 
-    private static boolean pingServer(String host, int port, DynaloadService service) {
+    private static boolean pingServer(String host, int port, DynaloadServerService service) {
         try (Socket socket = new Socket(host, port)) {
             DataInputStream in = new DataInputStream(socket.getInputStream());
             DataOutputStream out = new DataOutputStream(socket.getOutputStream());
@@ -42,7 +43,7 @@ public class DynaloadClient {
         }
     }
 
-    private static List<String> listRemoteClasses(String host, int port, DynaloadService service) throws Exception {
+    private static List<String> listRemoteClasses(String host, int port, DynaloadServerService service) throws Exception {
         try (Socket socket = new Socket(host, port)) {
             DataInputStream in = new DataInputStream(socket.getInputStream());
             DataOutputStream out = new DataOutputStream(socket.getOutputStream());
@@ -52,7 +53,7 @@ public class DynaloadClient {
         }
     }
 
-    private static Map<String, String> fetchAndSaveAllClasses(String host, int port, List<String> classes, DynaloadService service) throws Exception {
+    private static Map<String, String> fetchAndSaveAllClasses(String host, int port, List<String> classes, DynaloadServerService service) throws Exception {
         Map<String, String> keyToClassName = new HashMap<>();
         try (Socket socket = new Socket(host, port)) {
             DataInputStream in = new DataInputStream(socket.getInputStream());
@@ -71,9 +72,8 @@ public class DynaloadClient {
         return keyToClassName;
     }
 
-    private static void exportAndValidateClasses(List<String> classes, Map<String, String> keyToClassName, DynaloadService service) {
+    private static void exportAndValidateClasses(List<String> classes, Map<String, String> keyToClassName, DynaloadServerService service) {
 
-        service.exportJarToLibs();
 
         for (String path : classes) {
             String className = keyToClassName.get(path);
@@ -83,12 +83,14 @@ public class DynaloadClient {
                     if (clazz.isInterface() || clazz.isAnnotation() || Modifier.isAbstract(clazz.getModifiers()) || clazz.isEnum()) {
                         continue;
                     }
-                    DynaloadService.validateClass(clazz);
+
+                    DynaloadServerService.validateClass(clazz);
                 } catch (Exception e) {
                     System.err.println("[Dynaload] Validation failed: " + className);
                     e.printStackTrace();
                 }
             }
         }
+        service.exportJarToLibs();
     }
 }

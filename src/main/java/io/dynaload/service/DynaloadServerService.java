@@ -21,7 +21,7 @@ import java.util.jar.JarOutputStream;
 
 import static io.dynaload.util.DynaloadOpCodes.*;
 
-public class DynaloadService {
+public class DynaloadServerService {
 
     private final static String BASE_DIR = "build/dynaload";
     private JarLoader jarLoader = null;
@@ -186,6 +186,9 @@ public class DynaloadService {
 
             // Garante que o diretório de destino exista
             Files.createDirectories(outputJar.getParent());
+
+            // Remove o JAR antigo, se existir
+            Files.deleteIfExists(outputJar);
 
             try (JarOutputStream jarOut = new JarOutputStream(new FileOutputStream(outputJar.toFile()))) {
                 Files.walk(buildDir)
