@@ -1,36 +1,36 @@
 # Dynaload Server
 
-O **Dynaload Server** é um runtime leve e independente de framework para expor dinamicamente classes, interfaces e métodos via socket, com suporte a exportação de bytecode, invocação remota e discovery.
+**Dynaload Server** is a lightweight, framework-independent runtime designed to dynamically expose Java classes, interfaces, and methods over sockets. It supports remote bytecode export, method invocation, and discovery via a custom binary protocol.
 
 ---
 
-## 🔧 Como funciona?
+## How It Works
 
-O Dynaload Server escaneia seu classpath em busca de:
+Dynaload Server scans the classpath for the following annotations:
 
-* **@DynaloadExport**: exporta a classe para download remoto de bytecode
-* **@DynaloadService + @DynaloadCallable**: exporta métodos para invocação remota
+* `@DynaloadExport`: Exports a class for remote bytecode retrieval
+* `@DynaloadService` + `@DynaloadCallable`: Exposes methods for remote invocation
 
-O servidor cria um socket TCP customizado, com protocolo binário baseado em `Frame`, onde cada comando (GET\_CLASS, INVOKE, LIST\_CLASSES, etc) possui um opCode definido.
+The server initializes a custom TCP socket and handles framed binary commands (e.g., `GET_CLASS`, `INVOKE`, `LIST_CLASSES`) using a defined opCode protocol.
 
 ---
 
-## 🚀 Iniciando
+## Getting Started
 
-### Inicialização manual
+### Manual Initialization
 
 ```java
 public class Main {
     public static void main(String[] args) {
-        Dynaload.start(9999, "com.exemplo.meupacote");
+        Dynaload.start(9999, "com.example.package");
     }
 }
 ```
 
-### Inicialização automática com anotacão
+### Automatic Initialization via Annotation
 
 ```java
-@DynaloadStart(basePackage = "com.exemplo.meupacote", port = 9999)
+@DynaloadStart(basePackage = "com.example.package", port = 9999)
 public class Application {
     public static void main(String[] args) {
         DynaloadAutoBootstrap.init();
@@ -38,24 +38,24 @@ public class Application {
 }
 ```
 
-> Obs: o servidor será executado em uma thread separada chamada `Dynaload-Server-Thread`.
+> Note: the server runs in a separate thread named `Dynaload-Server-Thread`.
 
 ---
 
-## ✨ Anotações Suportadas
+## Supported Annotations
 
-### @DynaloadExport
+### `@DynaloadExport`
 
 ```java
-@DynaloadExport(value = "v1/account", includeDependencies = {Endereco.class})
+@DynaloadExport(value = "v1/account", includeDependencies = { Address.class })
 public class Account {
-  ...
+    ...
 }
 ```
 
-Exporta a classe para download remoto via `GET_CLASS`. Também permite declarar dependências que serão exportadas junto.
+Exports the class for remote retrieval via `GET_CLASS`. Dependencies listed in `includeDependencies` will also be exported.
 
-### @DynaloadService + @DynaloadCallable
+### `@DynaloadService` + `@DynaloadCallable`
 
 ```java
 @DynaloadService
@@ -68,110 +68,111 @@ public class UserService {
 }
 ```
 
-Expõe o método para invocação remota via `INVOKE`.
+Exposes the method for remote execution via the `INVOKE` command.
 
-### @DynaloadStart
+### `@DynaloadStart`
 
 ```java
 @DynaloadStart(port = 9999, basePackage = "com.myapp")
 ```
 
-Opcional. Usado para inicialização automática via `DynaloadAutoBootstrap.init()`.
+Optional. Used for auto-bootstrapping via `DynaloadAutoBootstrap.init()`.
 
 ---
 
-## 📂 Estrutura dos Frames
+## Frame Structure
 
-| Campo        | Tipo    | Descrição                         |
-| ------------ | ------- | --------------------------------- |
-| Header       | short   | Sempre `0xCAFE`                   |
-| Request ID   | int     | ID da requisição                  |
-| OpCode       | byte    | Tipo da operação (ex: GET\_CLASS) |
-| Payload Size | int     | Tamanho do payload                |
-| Payload      | byte\[] | Dados binários                    |
+| Field        | Type     | Description                        |
+| ------------ | -------- | ---------------------------------- |
+| Header       | `short`  | Always `0xCAFE`                    |
+| Request ID   | `int`    | Identifies the request             |
+| OpCode       | `byte`   | Operation type (e.g., `GET_CLASS`) |
+| Payload Size | `int`    | Size of the binary payload         |
+| Payload      | `byte[]` | Serialized data content            |
 
-### OpCodes
+### Defined OpCodes
 
 ```java
-DynaloadOpCodes.GET_CLASS          = 0x01
-DynaloadOpCodes.INVOKE             = 0x02
-DynaloadOpCodes.LIST_CLASSES       = 0x03
-DynaloadOpCodes.PING               = 0x04
-DynaloadOpCodes.CLOSE              = 0x05
-DynaloadOpCodes.ERROR              = 0x7F
+DynaloadOpCodes.GET_CLASS    = 0x01
+DynaloadOpCodes.INVOKE       = 0x02
+DynaloadOpCodes.LIST_CLASSES = 0x03
+DynaloadOpCodes.PING         = 0x04
+DynaloadOpCodes.CLOSE        = 0x05
+DynaloadOpCodes.ERROR        = 0x7F
 ```
 
 ---
 
-## 🔍 Funcionalidades internas
+## Internal Components
 
-### StubInterfaceGenerator
+### `StubInterfaceGenerator`
 
-Gera interfaces `@RemoteService` automaticamente para qualquer classe com `@DynaloadService` e métodos `@DynaloadCallable` usando ByteBuddy, no pacote `io.dynaload.remote.service`, e exporta via `ClassExportScanner`.
+Automatically generates `@RemoteService` interfaces for any class annotated with `@DynaloadService` and `@DynaloadCallable` methods. Uses ByteBuddy to export them under the `io.dynaload.remote.service` package.
 
-### ClassExportScanner
+### `ClassExportScanner`
 
-Escaneia e registra todas as classes anotadas com `@DynaloadExport`. Cada classe pode ser recuperada via chave customizada, ex: `v1/account`.
+Scans and registers all classes marked with `@DynaloadExport`. Each class is associated with a custom key (e.g., `v1/account`) for later retrieval.
 
-### CallableScanner
+### `CallableScanner`
 
-Escaneia métodos `@DynaloadCallable` dentro de `@DynaloadService` e registra na `CallableRegistry` para invocação.
+Discovers all `@DynaloadCallable` methods inside `@DynaloadService` classes and registers them in the `CallableRegistry`.
 
-### SocketServer
+### `SocketServer`
 
-Servidor TCP com protocolo binário multiplexado. Cada cliente pode realizar múltiplas operações por socket. Comandos como `INVOKE` usam conexão persistente, outros como `GET_CLASS` fecham após resposta.
+Multiplexed TCP server that supports multiple operations per socket. Commands like `INVOKE` use persistent connections; others like `GET_CLASS` close the connection after response.
 
 ---
 
-## 🛡️ Exemplo de exportação com dependências
+## Example: Exporting with Dependencies
 
 ```java
 @DynaloadExport(value = "v1/user", includeDependencies = { Address.class, Role.class })
 public class User implements Serializable {
-  ...
+    ...
 }
 ```
 
 ---
 
-## 🚫 Limitações atuais
+## Current Limitations
 
-* Não há autenticação/autorizacao (futuro: API Key).
-* Apenas serialização Java nativa (ObjectInputStream).
-* Métodos devem ser públicos e serializáveis.
-* Requisições de `INVOKE` e `GET_CLASS` precisam que todas as dependências estejam visíveis ou exportadas.
-
----
-
-## ⚡ Dica para Debug
-
-Use o comando `LIST_CLASSES` para checar se o servidor registrou corretamente as classes exportadas.
+* No authentication/authorization (future support for API Key)
+* Only supports native Java serialization (ObjectInputStream)
+* All exported methods must be `public` and `Serializable`
+* `INVOKE` and `GET_CLASS` require all dependencies to be exportable or already visible
 
 ---
 
-## 🚫 Não use
+## Debug Tip
 
-Evite rodar `Dynaload.start(...)` na thread principal de um servidor Spring Boot. Use `new Thread(...).start()` ou `@PostConstruct` com `@Async` se estiver embutido.
+Use the `LIST_CLASSES` command to verify if the server has correctly registered the exported classes.
 
 ---
 
-## 📃 Exemplo de estrutura do projeto
+## Caution
+
+Avoid calling `Dynaload.start(...)` on the main thread of a Spring Boot application. Use `new Thread(...).start()` or `@PostConstruct` with `@Async` if embedding in a framework.
+
+---
+
+## Recommended Project Structure
 
 ```
 project-root/
 ├── src/
 │   └── main/java/
-│       ├── com/exemplo/model/User.java
-│       ├── com/exemplo/service/UserService.java
-│       └── com/exemplo/Main.java
+│       ├── com/example/model/User.java
+│       ├── com/example/service/UserService.java
+│       └── com/example/Main.java
 ├── build/dynaload/
 │   └── io/dynaload/remote/service/UserService.class
 ```
 
 ---
 
-## 🚜 Veja também:
+## Related Modules
 
 * [Dynaload Client](../dynaload-client)
-* [Dynaload Spring Starter](../dynaload-spring-starter) (opcional)
+* [Dynaload Spring Starter](../dynaload-spring-starter) (optional)
 * [Dynaload Protocol Spec](../protocol.md)
+
